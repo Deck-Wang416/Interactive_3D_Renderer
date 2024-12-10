@@ -145,5 +145,11 @@ float length( Vec4f aVec ) noexcept
 	return std::sqrt( dot( aVec, aVec ) );
 }
 
+inline bool operator==(const Vec4f& a, const Vec4f& b) noexcept {
+    return a.x == b.x && 
+           a.y == b.y && 
+           a.z == b.z && 
+           a.w == b.w;
+}
 
 #endif // VEC4_HPP_7524F057_7AA7_4C99_AA52_DB0B5A3F8CAA

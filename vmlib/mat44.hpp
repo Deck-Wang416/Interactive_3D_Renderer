@@ -71,7 +71,6 @@ Mat44f operator*( Mat44f const& aLeft, Mat44f const& aRight ) noexcept
     return result;
 }
 
-constexpr
 Vec4f operator*( Mat44f const& aLeft, Vec4f const& aRight ) noexcept
 {
     Vec4f result;
@@ -175,7 +174,16 @@ Mat44f make_perspective_projection( float aFovInRadians, float aAspect, float aN
     return result;
 }
 
-
-
+// Operator == for Mat44f to allow comparisons in Catch2 tests
+inline bool operator==(const Mat44f& a, const Mat44f& b) noexcept {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            if (a(i, j) != b(i, j)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 #endif // MAT44_HPP_E7187A26_469E_48AD_A3D2_63150F05A4CA
