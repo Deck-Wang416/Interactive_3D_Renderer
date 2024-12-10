@@ -1,5 +1,5 @@
 # Ignore build directory
-build/
+_build_/
 
 # Ignore binary files
 bin/
