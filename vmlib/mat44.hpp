@@ -59,11 +59,16 @@ constexpr Mat44f kIdentity44f = { {
 constexpr
 Mat44f operator*( Mat44f const& aLeft, Mat44f const& aRight ) noexcept
 {
-	//TODO: your implementation goes here
-	//TODO: remove the following when you start your implementation
-	(void)aLeft;   // Avoid warnings about unused arguments until the function
-	(void)aRight;  // is properly implemented.
-	return kIdentity44f;
+    Mat44f result{};
+    for (size_t i = 0; i < 4; ++i) {
+        for (size_t j = 0; j < 4; ++j) {
+            result(i, j) = 0.0f;
+            for (size_t k = 0; k < 4; ++k) {
+                result(i, j) += aLeft(i, k) * aRight(k, j);
+            }
+        }
+    }
+    return result;
 }
 
 constexpr
