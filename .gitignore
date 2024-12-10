@@ -1,0 +1,38 @@
+# Ignore build directory
+build/
+
+# Ignore binary files
+bin/
+
+# Ignore libraries
+lib/
+
+# Ignore compiled object files, shared libraries, and executables
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.out
+
+# Ignore temporary files and logs
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.dmp
+
+# Ignore OS-specific files
+.DS_Store
+
+# Ignore IDE specific files
+.vscode/
+
+# Ignore Python virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
