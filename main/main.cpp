@@ -33,6 +33,7 @@ namespace
 
 	GLuint vao, vbo;
 	std::vector<float> positions;
+	std::vector<float> normals; 
 	GLuint shaderProgram;
 	
 	void glfw_callback_error_( int, char const* );
@@ -44,35 +45,62 @@ namespace
 		auto result = rapidobj::ParseFile(path);
 		if (result.error) {
 			throw std::runtime_error("Failed to load OBJ file: " + path);
-		}else {
-			std::cout << "OBJ file loaded successfully!" << std::endl;
 		}
 
+		// 清空 positions 和 normals
 		positions.clear();
-		positions.insert(positions.end(), result.attributes.positions.begin(), result.attributes.positions.end());
+		normals.clear();
 
-		std::cout << "positions.size() = " << positions.size() << std::endl;
-		std::cout << "attributes.positions.size() = " << result.attributes.positions.size() << std::endl;
-		std::cout << "Type of positions: " << typeid(positions).name() << std::endl;
-		std::cout << "Type of result.attributes.positions: " << typeid(result.attributes.positions).name() << std::endl;
+		for (const auto& shape : result.shapes) {
+			for (const auto& index : shape.mesh.indices) {
+				int vertex_index = index.position_index;
+				positions.push_back(result.attributes.positions[vertex_index * 3 + 0]);
+				positions.push_back(result.attributes.positions[vertex_index * 3 + 1]);
+				positions.push_back(result.attributes.positions[vertex_index * 3 + 2]);
 
-		glGenVertexArrays(1, &vao);
-		glBindVertexArray(vao);
+				if (index.normal_index >= 0) {
+					int normal_index = index.normal_index;
+					normals.push_back(result.attributes.normals[normal_index * 3 + 0]);
+					normals.push_back(result.attributes.normals[normal_index * 3 + 1]);
+					normals.push_back(result.attributes.normals[normal_index * 3 + 2]);
+				} 
+			}
+		}
+
+		std::cout << "[DEBUG] positions.size() = " << positions.size() << std::endl;
+		std::cout << "[DEBUG] normals.size() = " << normals.size() << std::endl;
 
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_STATIC_DRAW);
 
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		// 创建一个缓冲区，包含顶点位置和法线
+		std::vector<float> vertex_data;
+		for (size_t i = 0; i < positions.size() / 3; ++i) {
+			vertex_data.push_back(positions[i * 3 + 0]); // x
+			vertex_data.push_back(positions[i * 3 + 1]); // y
+			vertex_data.push_back(positions[i * 3 + 2]); // z
+
+			vertex_data.push_back(normals[i * 3 + 0]); // nx
+			vertex_data.push_back(normals[i * 3 + 1]); // ny
+			vertex_data.push_back(normals[i * 3 + 2]); // nz
+		}
+
+		glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(float), vertex_data.data(), GL_STATIC_DRAW);
+
+		// 顶点位置属性
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
+
+		// 法线属性
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+		glEnableVertexAttribArray(1);
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
 	}
-
 	void glfw_callback_error_(int, char const*);
 	void glfw_callback_key_(GLFWwindow*, int, int, int, int);
 
@@ -89,24 +117,73 @@ namespace
 
 void render_scene()
 {
-	glUseProgram(shaderProgram); 
+    glUseProgram(shaderProgram); 
+    std::cout << "[DEBUG] Using shader program: " << shaderProgram << std::endl;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    std::cout << "[DEBUG] Buffers cleared" << std::endl;
 
+    // 计算视图矩阵
     Mat44f view_matrix = make_translation({ -camera_position[0], -camera_position[1], -camera_position[2] });
     Mat44f rotation_x = make_rotation_x(camera_pitch * M_PI / 180.0f);
     Mat44f rotation_y = make_rotation_y(camera_yaw * M_PI / 180.0f);
     Mat44f view = rotation_x * rotation_y * view_matrix;
 
     GLint view_loc = glGetUniformLocation(shaderProgram, "view");
-    if (view_loc != -1) {
+    if (view_loc == -1) {
+        std::cerr << "[ERROR] Uniform 'view' not found in shader program" << std::endl;
+    } else {
         glUniformMatrix4fv(view_loc, 1, GL_FALSE, view.v);
+        std::cout << "[DEBUG] View matrix sent to shader." << std::endl;
+    }
+
+    // 方向光的方向 (0, 1, -1) 并标准化
+    Vec3f lightDirection = { 0.0f, 1.0f, -1.0f };
+    float length = std::sqrt(lightDirection[0] * lightDirection[0] + 
+                             lightDirection[1] * lightDirection[1] + 
+                             lightDirection[2] * lightDirection[2]);
+    lightDirection[0] /= length;
+    lightDirection[1] /= length;
+    lightDirection[2] /= length;
+
+    GLint lightDirLoc = glGetUniformLocation(shaderProgram, "lightDir");
+    if (lightDirLoc == -1) {
+        std::cerr << "[ERROR] Uniform 'lightDir' not found in shader program" << std::endl;
+    } else {
+        glUniform3fv(lightDirLoc, 1, &lightDirection[0]);
+        std::cout << "[DEBUG] Light direction sent to shader." << std::endl;
+    }
+
+    // 光的颜色 (1.0, 1.0, 1.0) 表示白色
+    Vec3f lightColor = { 1.0f, 1.0f, 1.0f };
+    GLint lightColorLoc = glGetUniformLocation(shaderProgram, "lightColor");
+    if (lightColorLoc == -1) {
+        std::cerr << "[ERROR] Uniform 'lightColor' not found in shader program" << std::endl;
+    } else {
+        glUniform3fv(lightColorLoc, 1, &lightColor[0]);
+        std::cout << "[DEBUG] Light color sent to shader." << std::endl;
     }
 
     glBindVertexArray(vao);
+    std::cout << "[DEBUG] VAO bound: " << vao << std::endl;
+
     int vertex_count = positions.size() / 3;
-	glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+    std::cout << "[DEBUG] Vertex count: " << vertex_count << std::endl;
+
+    if (vertex_count <= 0) {
+        std::cerr << "[ERROR] Vertex count is zero or negative, possible data loading error!" << std::endl;
+    }
+
+    glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+    std::cout << "[DEBUG] Drawing completed." << std::endl;
+
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        std::cerr << "[ERROR] OpenGL Error: " << error << std::endl;
+    }
+
     glBindVertexArray(0);
+    std::cout << "[DEBUG] VAO unbound" << std::endl;
 }
 
 GLuint create_shader_program(const char* vertex_shader_source, const char* fragment_shader_source)
@@ -266,30 +343,49 @@ int main() try
 
 	const char* vertex_shader_source = R"(
 		#version 330 core
+
 		layout(location = 0) in vec3 aPos;
+		layout(location = 1) in vec3 aNormal;
+
+		out vec3 FragPos; 
+		out vec3 Normal;
 
 		uniform mat4 view;
 
 		void main()
 		{
 			gl_Position = view * vec4(aPos, 1.0);
+			FragPos = aPos;
+			Normal = aNormal;
 		}
 	)";
 
 	const char* fragment_shader_source = R"(
 		#version 330 core
+
+		in vec3 Normal;
+
 		out vec4 FragColor;
+
+		uniform vec3 lightDir = vec3(0.0, 1.0, -1.0);
+		uniform vec3 lightColor = vec3(1.0, 1.0, 1.0);
 
 		void main()
 		{
-			FragColor = vec4(0.8, 0.3, 0.02, 1.0); // 这里的颜色可自定义
+			vec3 norm = normalize(Normal); 
+			vec3 lightDirNorm = normalize(lightDir);
+			float diff = max(dot(norm, lightDirNorm), 0.0);
+			FragColor = vec4(vec3(diff), 1.0);
 		}
 	)";
 
 	shaderProgram = create_shader_program(vertex_shader_source, fragment_shader_source);
-	std::cout << "shaderProgram = " << shaderProgram << std::endl;
 
 	glViewport( 0, 0, iwidth, iheight );
+
+	glClearColor(0.4f, 0.4f, 0.4f, 1.0f); // 灰色背景 (RGB = 128, 128, 128)
+
+	glEnable(GL_DEPTH_TEST);
 
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
