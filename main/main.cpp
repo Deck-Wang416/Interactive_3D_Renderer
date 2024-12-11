@@ -35,6 +35,40 @@ namespace
 	std::vector<float> positions;
 	std::vector<float> normals; 
 	GLuint shaderProgram;
+
+	// 鼠标按键回调函数
+	void glfw_callback_mouse_button(GLFWwindow* window, int button, int action, int mods) {
+		if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+			mouse_look_enabled = !mouse_look_enabled; // 切换鼠标视角控制状态
+
+			if (mouse_look_enabled) {
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 锁定鼠标
+			} else {
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // 释放鼠标
+			}
+		}
+	}
+
+	// 鼠标移动回调函数
+	void glfw_callback_cursor_position(GLFWwindow* window, double xpos, double ypos) {
+		if (!mouse_look_enabled) return;
+
+		float sensitivity = 0.1f;
+		float dx = xpos - last_mouse_x;
+		float dy = last_mouse_y - ypos;
+
+		last_mouse_x = xpos;
+		last_mouse_y = ypos;
+
+		dx *= sensitivity;
+		dy *= sensitivity;
+
+		camera_yaw += dx;
+		camera_pitch += dy;
+
+		if (camera_pitch > 89.0f) camera_pitch = 89.0f;
+		if (camera_pitch < -89.0f) camera_pitch = -89.0f;
+	}
 	
 	void glfw_callback_error_( int, char const* );
 
@@ -284,6 +318,8 @@ int main() try
 	// TODO: Additional event handling setup
 
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
+	glfwSetMouseButtonCallback(window, glfw_callback_mouse_button);
+	glfwSetCursorPosCallback(window, glfw_callback_cursor_position);
 
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	glfwSetCursorPosCallback(window, [](GLFWwindow* window, double xpos, double ypos) {
