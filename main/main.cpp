@@ -36,7 +36,6 @@ namespace
 	std::vector<float> normals; 
 	GLuint shaderProgram;
 
-	// 鼠标按键回调函数
 	void glfw_callback_mouse_button(GLFWwindow* window, int button, int action, int mods) {
 		if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
 			mouse_look_enabled = !mouse_look_enabled; // 切换鼠标视角控制状态
@@ -49,7 +48,6 @@ namespace
 		}
 	}
 
-	// 鼠标移动回调函数
 	void glfw_callback_cursor_position(GLFWwindow* window, double xpos, double ypos) {
 		if (!mouse_look_enabled) return;
 
@@ -81,7 +79,6 @@ namespace
 			throw std::runtime_error("Failed to load OBJ file: " + path);
 		}
 
-		// 清空 positions 和 normals
 		positions.clear();
 		normals.clear();
 
@@ -101,16 +98,12 @@ namespace
 			}
 		}
 
-		std::cout << "[DEBUG] positions.size() = " << positions.size() << std::endl;
-		std::cout << "[DEBUG] normals.size() = " << normals.size() << std::endl;
-
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-		// 创建一个缓冲区，包含顶点位置和法线
 		std::vector<float> vertex_data;
 		for (size_t i = 0; i < positions.size() / 3; ++i) {
 			vertex_data.push_back(positions[i * 3 + 0]); // x
@@ -124,11 +117,9 @@ namespace
 
 		glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(float), vertex_data.data(), GL_STATIC_DRAW);
 
-		// 顶点位置属性
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
 
-		// 法线属性
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
 		glEnableVertexAttribArray(1);
 
@@ -152,26 +143,19 @@ namespace
 void render_scene()
 {
     glUseProgram(shaderProgram); 
-    std::cout << "[DEBUG] Using shader program: " << shaderProgram << std::endl;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    std::cout << "[DEBUG] Buffers cleared" << std::endl;
 
-    // 计算视图矩阵
     Mat44f view_matrix = make_translation({ -camera_position[0], -camera_position[1], -camera_position[2] });
     Mat44f rotation_x = make_rotation_x(camera_pitch * M_PI / 180.0f);
     Mat44f rotation_y = make_rotation_y(camera_yaw * M_PI / 180.0f);
     Mat44f view = rotation_x * rotation_y * view_matrix;
 
     GLint view_loc = glGetUniformLocation(shaderProgram, "view");
-    if (view_loc == -1) {
-        std::cerr << "[ERROR] Uniform 'view' not found in shader program" << std::endl;
-    } else {
+    if (view_loc != -1) {
         glUniformMatrix4fv(view_loc, 1, GL_FALSE, view.v);
-        std::cout << "[DEBUG] View matrix sent to shader." << std::endl;
     }
 
-    // 方向光的方向 (0, 1, -1) 并标准化
     Vec3f lightDirection = { 0.0f, 1.0f, -1.0f };
     float length = std::sqrt(lightDirection[0] * lightDirection[0] + 
                              lightDirection[1] * lightDirection[1] + 
@@ -181,43 +165,22 @@ void render_scene()
     lightDirection[2] /= length;
 
     GLint lightDirLoc = glGetUniformLocation(shaderProgram, "lightDir");
-    if (lightDirLoc == -1) {
-        std::cerr << "[ERROR] Uniform 'lightDir' not found in shader program" << std::endl;
-    } else {
+    if (lightDirLoc != -1) {
         glUniform3fv(lightDirLoc, 1, &lightDirection[0]);
-        std::cout << "[DEBUG] Light direction sent to shader." << std::endl;
     }
 
-    // 光的颜色 (1.0, 1.0, 1.0) 表示白色
     Vec3f lightColor = { 1.0f, 1.0f, 1.0f };
     GLint lightColorLoc = glGetUniformLocation(shaderProgram, "lightColor");
-    if (lightColorLoc == -1) {
-        std::cerr << "[ERROR] Uniform 'lightColor' not found in shader program" << std::endl;
-    } else {
+    if (lightColorLoc != -1) {
         glUniform3fv(lightColorLoc, 1, &lightColor[0]);
-        std::cout << "[DEBUG] Light color sent to shader." << std::endl;
     }
 
     glBindVertexArray(vao);
-    std::cout << "[DEBUG] VAO bound: " << vao << std::endl;
 
     int vertex_count = positions.size() / 3;
-    std::cout << "[DEBUG] Vertex count: " << vertex_count << std::endl;
-
-    if (vertex_count <= 0) {
-        std::cerr << "[ERROR] Vertex count is zero or negative, possible data loading error!" << std::endl;
-    }
-
     glDrawArrays(GL_TRIANGLES, 0, vertex_count);
-    std::cout << "[DEBUG] Drawing completed." << std::endl;
-
-    GLenum error = glGetError();
-    if (error != GL_NO_ERROR) {
-        std::cerr << "[ERROR] OpenGL Error: " << error << std::endl;
-    }
 
     glBindVertexArray(0);
-    std::cout << "[DEBUG] VAO unbound" << std::endl;
 }
 
 GLuint create_shader_program(const char* vertex_shader_source, const char* fragment_shader_source)
@@ -281,7 +244,6 @@ int main() try
 
 	glfwWindowHint( GLFW_SRGB_CAPABLE, GLFW_TRUE );
 	glfwWindowHint( GLFW_DOUBLEBUFFER, GLFW_TRUE );
-
 	//glfwWindowHint( GLFW_RESIZABLE, GLFW_FALSE );
 
 	glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 4 );
@@ -315,8 +277,6 @@ int main() try
 	GLFWWindowDeleter windowDeleter{ window };
 
 	// Set up event handling
-	// TODO: Additional event handling setup
-
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
 	glfwSetMouseButtonCallback(window, glfw_callback_mouse_button);
 	glfwSetCursorPosCallback(window, glfw_callback_cursor_position);
@@ -419,15 +379,11 @@ int main() try
 
 	glViewport( 0, 0, iwidth, iheight );
 
-	glClearColor(0.4f, 0.4f, 0.4f, 1.0f); // 灰色背景 (RGB = 128, 128, 128)
+	glClearColor(0.4f, 0.4f, 0.4f, 1.0f);
 
 	glEnable(GL_DEPTH_TEST);
 
 	// Other initialization & loading
-	OGL_CHECKPOINT_ALWAYS();
-	
-	// TODO: global GL setup goes here
-
 	OGL_CHECKPOINT_ALWAYS();
 
 	// Main loop
@@ -458,15 +414,7 @@ int main() try
 
 			glViewport( 0, 0, nwidth, nheight );
 		}
-
-		// Update state
-		//TODO: update state
-
 		// Draw scene
-		OGL_CHECKPOINT_DEBUG();
-
-		//TODO: draw frame
-
 		OGL_CHECKPOINT_DEBUG();
 
 		render_scene();
@@ -475,9 +423,6 @@ int main() try
 		glfwSwapBuffers( window );
 	}
 
-	// Cleanup.
-	//TODO: additional cleanup
-	
 	return 0;
 }
 catch( std::exception const& eErr )
@@ -504,16 +449,16 @@ namespace
 		}
 
 		if (aAction == GLFW_PRESS || aAction == GLFW_REPEAT) {
-			float speed = 0.1f; // 默认速度
-			if (glfwGetKey(aWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) speed *= 2.0f; // 加速
-			if (glfwGetKey(aWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 0.5f; // 减速
+			float speed = 0.1f;
+			if (glfwGetKey(aWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) speed *= 2.0f;
+			if (glfwGetKey(aWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 0.5f;
 
-			if (aKey == GLFW_KEY_W) camera_position[2] -= speed; // 向前
-			if (aKey == GLFW_KEY_S) camera_position[2] += speed; // 向后
-			if (aKey == GLFW_KEY_A) camera_position[0] -= speed; // 左
-			if (aKey == GLFW_KEY_D) camera_position[0] += speed; // 右
-			if (aKey == GLFW_KEY_E) camera_position[1] += speed; // 上
-			if (aKey == GLFW_KEY_Q) camera_position[1] -= speed; // 下
+			if (aKey == GLFW_KEY_W) camera_position[2] -= speed;
+			if (aKey == GLFW_KEY_S) camera_position[2] += speed;
+			if (aKey == GLFW_KEY_A) camera_position[0] -= speed;
+			if (aKey == GLFW_KEY_D) camera_position[0] += speed;
+			if (aKey == GLFW_KEY_E) camera_position[1] += speed;
+			if (aKey == GLFW_KEY_Q) camera_position[1] -= speed;
 		}
 	}
 
