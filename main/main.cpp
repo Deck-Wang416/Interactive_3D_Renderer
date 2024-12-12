@@ -20,6 +20,9 @@
 
 #include "iostream"
 
+#define STB_IMAGE_IMPLEMENTATION 
+#include "../third_party/stb/include/stb_image.h"
+
 namespace
 {
 	constexpr char const* kWindowTitle = "COMP3811 - CW2";
@@ -32,18 +35,52 @@ namespace
 	double last_mouse_x = 0.0, last_mouse_y = 0.0;
 
 	GLuint vao, vbo;
-	std::vector<float> positions;
-	std::vector<float> normals; 
 	GLuint shaderProgram;
+	GLuint textureID;
+
+	std::vector<float> positions;
+	std::vector<float> normals;
+	std::vector<float> texCoords;
+
+	void load_texture(const std::string& path) {
+		int width, height, nrChannels;
+		unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
+		if (!data) {
+			std::cerr << "[ERROR] Failed to load texture: " << path << std::endl;
+			throw std::runtime_error("Failed to load texture: " + path);
+		}
+
+		glGenTextures(1, &textureID);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		if (nrChannels == 3) {
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		} else if (nrChannels == 4) {
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+		} else {
+			throw std::runtime_error("Unsupported texture format.");
+		}
+
+		glGenerateMipmap(GL_TEXTURE_2D);
+		stbi_image_free(data);
+
+		std::cout << "[DEBUG] Texture loaded successfully: " << path << std::endl;
+		std::cout << "[DEBUG] Texture size: " << width << "x" << height << ", Channels: " << nrChannels << std::endl;
+	}
 
 	void glfw_callback_mouse_button(GLFWwindow* window, int button, int action, int mods) {
 		if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
-			mouse_look_enabled = !mouse_look_enabled; // 切换鼠标视角控制状态
+			mouse_look_enabled = !mouse_look_enabled;
 
 			if (mouse_look_enabled) {
-				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 锁定鼠标
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 			} else {
-				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // 释放鼠标
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 			}
 		}
 	}
@@ -81,6 +118,7 @@ namespace
 
 		positions.clear();
 		normals.clear();
+		texCoords.clear();
 
 		for (const auto& shape : result.shapes) {
 			for (const auto& index : shape.mesh.indices) {
@@ -94,9 +132,23 @@ namespace
 					normals.push_back(result.attributes.normals[normal_index * 3 + 0]);
 					normals.push_back(result.attributes.normals[normal_index * 3 + 1]);
 					normals.push_back(result.attributes.normals[normal_index * 3 + 2]);
-				} 
+				}
+
+				if (index.texcoord_index >= 0) {
+					int texcoord_index = index.texcoord_index;
+					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 0]); // u
+					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 1]); // v
+				} else {
+					// 如果没有纹理坐标，补充默认值
+					texCoords.push_back(0.0f); // u
+					texCoords.push_back(0.0f); // v
+				}
 			}
 		}
+
+		std::cout << "[DEBUG] positions.size() = " << positions.size() << std::endl;
+		std::cout << "[DEBUG] normals.size() = " << normals.size() << std::endl;
+		std::cout << "[DEBUG] texCoords.size() = " << texCoords.size() << std::endl;
 
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
@@ -113,15 +165,21 @@ namespace
 			vertex_data.push_back(normals[i * 3 + 0]); // nx
 			vertex_data.push_back(normals[i * 3 + 1]); // ny
 			vertex_data.push_back(normals[i * 3 + 2]); // nz
+
+			vertex_data.push_back(texCoords[i * 2 + 0]); // 纹理坐标 u
+			vertex_data.push_back(texCoords[i * 2 + 1]); // 纹理坐标 v
 		}
 
 		glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(float), vertex_data.data(), GL_STATIC_DRAW);
 
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
 
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
 		glEnableVertexAttribArray(1);
+
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); 
+		glEnableVertexAttribArray(2);
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
@@ -175,12 +233,17 @@ void render_scene()
         glUniform3fv(lightColorLoc, 1, &lightColor[0]);
     }
 
+	glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
+
     glBindVertexArray(vao);
 
     int vertex_count = positions.size() / 3;
     glDrawArrays(GL_TRIANGLES, 0, vertex_count);
 
     glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 GLuint create_shader_program(const char* vertex_shader_source, const char* fragment_shader_source)
@@ -324,6 +387,7 @@ int main() try
 	OGL_CHECKPOINT_ALWAYS();
 
 	load_obj_model("../assets/parlahti.obj");
+	load_texture("../assets/L4343A-4k.jpeg");
 
 	OGL_CHECKPOINT_ALWAYS();
 
@@ -342,9 +406,11 @@ int main() try
 
 		layout(location = 0) in vec3 aPos;
 		layout(location = 1) in vec3 aNormal;
+		layout(location = 2) in vec2 aTexCoords;
 
 		out vec3 FragPos; 
 		out vec3 Normal;
+		out vec2 TexCoords;
 
 		uniform mat4 view;
 
@@ -353,6 +419,7 @@ int main() try
 			gl_Position = view * vec4(aPos, 1.0);
 			FragPos = aPos;
 			Normal = aNormal;
+			TexCoords = aTexCoords;
 		}
 	)";
 
@@ -360,18 +427,21 @@ int main() try
 		#version 330 core
 
 		in vec3 Normal;
+		in vec2 TexCoords;
 
 		out vec4 FragColor;
 
 		uniform vec3 lightDir = vec3(0.0, 1.0, -1.0);
 		uniform vec3 lightColor = vec3(1.0, 1.0, 1.0);
+		uniform sampler2D texture1;
 
 		void main()
 		{
 			vec3 norm = normalize(Normal); 
 			vec3 lightDirNorm = normalize(lightDir);
 			float diff = max(dot(norm, lightDirNorm), 0.0);
-			FragColor = vec4(vec3(diff), 1.0);
+			vec4 texColor = texture(texture1, TexCoords); 
+			FragColor = texColor * vec4(vec3(diff), 1.0);
 		}
 	)";
 
