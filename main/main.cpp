@@ -1,27 +1,23 @@
+#include <iostream>
+#include <typeinfo>
+#include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
+
 #include <glad.h>
 #include <GLFW/glfw3.h>
 
-#include <typeinfo>
-#include <stdexcept>
-
-#include <cstdio>
-#include <cstdlib>
+#include "../third_party/rapidobj/include/rapidobj/rapidobj.hpp"
+#define STB_IMAGE_IMPLEMENTATION 
+#include "../third_party/stb/include/stb_image.h"
 
 #include "../support/error.hpp"
 #include "../support/program.hpp"
 #include "../support/checkpoint.hpp"
 #include "../support/debug_output.hpp"
-
 #include "../vmlib/vec4.hpp"
 #include "../vmlib/mat44.hpp"
-#include "../third_party/rapidobj/include/rapidobj/rapidobj.hpp"
-
 #include "defaults.hpp"
-
-#include "iostream"
-
-#define STB_IMAGE_IMPLEMENTATION 
-#include "../third_party/stb/include/stb_image.h"
 
 namespace
 {
@@ -46,7 +42,6 @@ namespace
 		int width, height, nrChannels;
 		unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
 		if (!data) {
-			std::cerr << "[ERROR] Failed to load texture: " << path << std::endl;
 			throw std::runtime_error("Failed to load texture: " + path);
 		}
 
@@ -68,9 +63,6 @@ namespace
 
 		glGenerateMipmap(GL_TEXTURE_2D);
 		stbi_image_free(data);
-
-		std::cout << "[DEBUG] Texture loaded successfully: " << path << std::endl;
-		std::cout << "[DEBUG] Texture size: " << width << "x" << height << ", Channels: " << nrChannels << std::endl;
 	}
 
 	void glfw_callback_mouse_button(GLFWwindow* window, int button, int action, int mods) {
@@ -136,19 +128,14 @@ namespace
 
 				if (index.texcoord_index >= 0) {
 					int texcoord_index = index.texcoord_index;
-					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 0]); // u
-					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 1]); // v
+					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 0]);
+					texCoords.push_back(result.attributes.texcoords[texcoord_index * 2 + 1]);
 				} else {
-					// 如果没有纹理坐标，补充默认值
-					texCoords.push_back(0.0f); // u
-					texCoords.push_back(0.0f); // v
+					texCoords.push_back(0.0f);
+					texCoords.push_back(0.0f);
 				}
 			}
 		}
-
-		std::cout << "[DEBUG] positions.size() = " << positions.size() << std::endl;
-		std::cout << "[DEBUG] normals.size() = " << normals.size() << std::endl;
-		std::cout << "[DEBUG] texCoords.size() = " << texCoords.size() << std::endl;
 
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
@@ -158,16 +145,16 @@ namespace
 
 		std::vector<float> vertex_data;
 		for (size_t i = 0; i < positions.size() / 3; ++i) {
-			vertex_data.push_back(positions[i * 3 + 0]); // x
-			vertex_data.push_back(positions[i * 3 + 1]); // y
-			vertex_data.push_back(positions[i * 3 + 2]); // z
+			vertex_data.push_back(positions[i * 3 + 0]);
+			vertex_data.push_back(positions[i * 3 + 1]);
+			vertex_data.push_back(positions[i * 3 + 2]);
 
-			vertex_data.push_back(normals[i * 3 + 0]); // nx
-			vertex_data.push_back(normals[i * 3 + 1]); // ny
-			vertex_data.push_back(normals[i * 3 + 2]); // nz
+			vertex_data.push_back(normals[i * 3 + 0]);
+			vertex_data.push_back(normals[i * 3 + 1]);
+			vertex_data.push_back(normals[i * 3 + 2]);
 
-			vertex_data.push_back(texCoords[i * 2 + 0]); // 纹理坐标 u
-			vertex_data.push_back(texCoords[i * 2 + 1]); // 纹理坐标 v
+			vertex_data.push_back(texCoords[i * 2 + 0]);
+			vertex_data.push_back(texCoords[i * 2 + 1]);
 		}
 
 		glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(float), vertex_data.data(), GL_STATIC_DRAW);
