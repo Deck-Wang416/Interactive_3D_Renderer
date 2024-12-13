@@ -34,9 +34,15 @@ namespace
 	GLuint shaderProgram;
 	GLuint textureID;
 
+	GLuint launchpad_vao, launchpad_vbo;
+	GLuint launchpadShaderProgram;
+
 	std::vector<float> positions;
 	std::vector<float> normals;
 	std::vector<float> texCoords;
+
+	std::vector<float> launchpad_positions;
+	std::vector<float> launchpad_normals;
 
 	void load_texture(const std::string& path) {
 		int width, height, nrChannels;
@@ -100,6 +106,61 @@ namespace
 	void glfw_callback_error_( int, char const* );
 
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
+
+	void load_launchpad_model(const std::string& path)
+	{
+		auto result = rapidobj::ParseFile(path);
+		if (result.error) {
+			throw std::runtime_error("Failed to load OBJ file: " + path);
+		}
+
+		launchpad_positions.clear();
+		launchpad_normals.clear();
+
+		for (const auto& shape : result.shapes) {
+			for (const auto& index : shape.mesh.indices) {
+				int vertex_index = index.position_index;
+				launchpad_positions.push_back(result.attributes.positions[vertex_index * 3 + 0]);
+				launchpad_positions.push_back(result.attributes.positions[vertex_index * 3 + 1]);
+				launchpad_positions.push_back(result.attributes.positions[vertex_index * 3 + 2]);
+
+				if (index.normal_index >= 0) {
+					int normal_index = index.normal_index;
+					launchpad_normals.push_back(result.attributes.normals[normal_index * 3 + 0]);
+					launchpad_normals.push_back(result.attributes.normals[normal_index * 3 + 1]);
+					launchpad_normals.push_back(result.attributes.normals[normal_index * 3 + 2]);
+				}
+			}
+		}
+
+		glGenVertexArrays(1, &launchpad_vao);
+		glBindVertexArray(launchpad_vao);
+
+		glGenBuffers(1, &launchpad_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, launchpad_vbo);
+
+		std::vector<float> vertex_data;
+		for (size_t i = 0; i < launchpad_positions.size() / 3; ++i) {
+			vertex_data.push_back(launchpad_positions[i * 3 + 0]);
+			vertex_data.push_back(launchpad_positions[i * 3 + 1]);
+			vertex_data.push_back(launchpad_positions[i * 3 + 2]);
+
+			vertex_data.push_back(launchpad_normals[i * 3 + 0]);
+			vertex_data.push_back(launchpad_normals[i * 3 + 1]);
+			vertex_data.push_back(launchpad_normals[i * 3 + 2]);
+		}
+
+		glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(float), vertex_data.data(), GL_STATIC_DRAW);
+
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+		glEnableVertexAttribArray(1);
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+	}
 
 	void load_obj_model(const std::string& path)
 	{
@@ -188,7 +249,6 @@ namespace
 void render_scene()
 {
     glUseProgram(shaderProgram); 
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     Mat44f view_matrix = make_translation({ -camera_position[0], -camera_position[1], -camera_position[2] });
@@ -220,17 +280,52 @@ void render_scene()
         glUniform3fv(lightColorLoc, 1, &lightColor[0]);
     }
 
-	glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureID);
     glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
 
     glBindVertexArray(vao);
-
     int vertex_count = positions.size() / 3;
     glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glUseProgram(launchpadShaderProgram); 
+
+    GLint view_loc_launchpad = glGetUniformLocation(launchpadShaderProgram, "view");
+    if (view_loc_launchpad != -1) {
+        glUniformMatrix4fv(view_loc_launchpad, 1, GL_FALSE, view.v);
+    }
+
+    GLint lightDirLoc_launchpad = glGetUniformLocation(launchpadShaderProgram, "lightDir");
+    if (lightDirLoc_launchpad != -1) {
+        glUniform3fv(lightDirLoc_launchpad, 1, &lightDirection[0]);
+    }
+
+    GLint lightColorLoc_launchpad = glGetUniformLocation(launchpadShaderProgram, "lightColor");
+    if (lightColorLoc_launchpad != -1) {
+        glUniform3fv(lightColorLoc_launchpad, 1, &lightColor[0]);
+    }
+
+    glBindVertexArray(launchpad_vao);
+
+	// first launchpad
+    Mat44f model_1 = make_translation({ 10.0f, 0.05f, -15.0f });
+    GLint model_loc = glGetUniformLocation(launchpadShaderProgram, "model");
+    if (model_loc != -1) {
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, model_1.v);
+    }
+    int launchpad_vertex_count = launchpad_positions.size() / 3;
+    glDrawArrays(GL_TRIANGLES, 0, launchpad_vertex_count);
+
+    // second launchpad
+    Mat44f model_2 = make_translation({ -20.0f, 0.05f, 25.0f });
+    if (model_loc != -1) {
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, model_2.v);
+    }
+    glDrawArrays(GL_TRIANGLES, 0, launchpad_vertex_count);
 
     glBindVertexArray(0);
-	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 GLuint create_shader_program(const char* vertex_shader_source, const char* fragment_shader_source)
@@ -365,7 +460,7 @@ int main() try
 	std::printf( "VERSION %s\n", glGetString( GL_VERSION ) );
 	std::printf( "SHADING_LANGUAGE_VERSION %s\n", glGetString( GL_SHADING_LANGUAGE_VERSION ) );
 
-	// Ddebug output
+	// Debug output
 #	if !defined(NDEBUG)
 	setup_gl_debug_output();
 #	endif // ~ !NDEBUG
@@ -375,6 +470,7 @@ int main() try
 
 	load_obj_model("../assets/parlahti.obj");
 	load_texture("../assets/L4343A-4k.jpeg");
+	load_launchpad_model("../assets/landingpad.obj"); 
 
 	OGL_CHECKPOINT_ALWAYS();
 
@@ -384,9 +480,48 @@ int main() try
 	// but not be part of the drawable surface area.
 	int iwidth, iheight;
 	glfwGetFramebufferSize( window, &iwidth, &iheight );
-
 	float aspect_ratio = float(iwidth) / float(iheight);
-	Mat44f projection_matrix = make_perspective_projection(45.0f * M_PI / 180.0f, aspect_ratio, 0.1f, 100.0f);
+	
+	const char* vertex_shader_launchpad_source = R"(
+		#version 330 core
+
+		layout(location = 0) in vec3 aPos;
+		layout(location = 1) in vec3 aNormal;
+
+		out vec3 FragPos; 
+		out vec3 Normal;
+
+		uniform mat4 view;
+
+		void main()
+		{
+			gl_Position = view * vec4(aPos, 1.0);
+			FragPos = aPos;
+			Normal = aNormal;
+		}
+	)";
+
+	const char* fragment_shader_launchpad_source = R"(
+		#version 330 core
+
+		in vec3 FragPos;
+		in vec3 Normal;
+
+		out vec4 FragColor;
+
+		uniform vec3 lightDir = vec3(0.0, 1.0, -1.0);
+		uniform vec3 lightColor = vec3(1.0, 1.0, 1.0);
+		uniform vec3 materialColor; // 材质颜色
+
+		void main()
+		{
+			vec3 norm = normalize(Normal); 
+			vec3 lightDirNorm = normalize(lightDir);
+			float diff = max(dot(norm, lightDirNorm), 0.0);
+			vec3 result = diff * lightColor * materialColor;
+			FragColor = vec4(result, 1.0);
+		}
+	)";
 
 	const char* vertex_shader_source = R"(
 		#version 330 core
@@ -432,6 +567,7 @@ int main() try
 		}
 	)";
 
+	launchpadShaderProgram = create_shader_program(vertex_shader_launchpad_source, fragment_shader_launchpad_source);
 	shaderProgram = create_shader_program(vertex_shader_source, fragment_shader_source);
 
 	glViewport( 0, 0, iwidth, iheight );
