@@ -106,6 +106,7 @@ Vec3f& operator*=( Vec3f& aLeft, float aRight ) noexcept
 	aLeft.z *= aRight;
 	return aLeft;
 }
+
 constexpr
 Vec3f& operator/=( Vec3f& aLeft, float aRight ) noexcept
 {
@@ -114,7 +115,6 @@ Vec3f& operator/=( Vec3f& aLeft, float aRight ) noexcept
 	aLeft.z /= aRight;
 	return aLeft;
 }
-
 
 // A few common functions:
 
@@ -141,6 +141,14 @@ Vec3f normalize( Vec3f aVec ) noexcept
 {
 	auto const l = length( aVec );
 	return aVec / l;
+}
+
+Vec3f cross(const Vec3f& a, const Vec3f& b) {
+    return {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    };
 }
 
 inline bool operator==(const Vec3f& a, const Vec3f& b) noexcept {

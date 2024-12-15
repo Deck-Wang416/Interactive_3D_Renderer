@@ -160,17 +160,19 @@ Mat44f make_scaling( float aSX, float aSY, float aSZ ) noexcept
 	return kIdentity44f;
 }
 
+inline 
+Mat44f make_perspective_projection(float aFovInRadians, float aAspect, float aNear, float aFar) noexcept {
+    Mat44f result = {};
 
-inline
-Mat44f make_perspective_projection( float aFovInRadians, float aAspect, float aNear, float aFar ) noexcept
-{
-    float f = 1.0f / std::tan(aFovInRadians / 2.0f);
-    Mat44f result{};
-    result(0, 0) = f / aAspect;
-    result(1, 1) = f;
-    result(2, 2) = (aFar + aNear) / (aNear - aFar);
-    result(2, 3) = (2.0f * aFar * aNear) / (aNear - aFar);
-    result(3, 2) = -1.0f;
+    float tanHalfFov = std::tan(aFovInRadians / 2.0f);
+
+    result(0, 0) = 1.0f / (aAspect * tanHalfFov); // X轴缩放
+    result(1, 1) = 1.0f / tanHalfFov;            // Y轴缩放
+    result(2, 2) = -(aFar + aNear) / (aFar - aNear); // Z轴缩放
+    result(2, 3) = -(2.0f * aFar * aNear) / (aFar - aNear); // Z轴平移
+    result(3, 2) = -1.0f;                         // 透视除法
+    result(3, 3) = 0.0f;
+
     return result;
 }
 
