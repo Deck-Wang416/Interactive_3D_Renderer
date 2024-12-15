@@ -166,11 +166,11 @@ Mat44f make_perspective_projection(float aFovInRadians, float aAspect, float aNe
 
     float tanHalfFov = std::tan(aFovInRadians / 2.0f);
 
-    result(0, 0) = 1.0f / (aAspect * tanHalfFov); // X轴缩放
-    result(1, 1) = 1.0f / tanHalfFov;            // Y轴缩放
-    result(2, 2) = -(aFar + aNear) / (aFar - aNear); // Z轴缩放
-    result(2, 3) = -(2.0f * aFar * aNear) / (aFar - aNear); // Z轴平移
-    result(3, 2) = -1.0f;                         // 透视除法
+    result(0, 0) = 1.0f / (aAspect * tanHalfFov);
+    result(1, 1) = 1.0f / tanHalfFov;
+    result(2, 2) = -(aFar + aNear) / (aFar - aNear);
+    result(2, 3) = -(2.0f * aFar * aNear) / (aFar - aNear);
+    result(3, 2) = -1.0f;
     result(3, 3) = 0.0f;
 
     return result;
