@@ -178,8 +178,6 @@ int main() try
 	 // Create VAO for the ship
 	 GLuint ship_one_vao = create_vao(ship);
 
-	 Mat44f spaceshipModel2World;
-
 	 //-------------------------------------------------------------------
 	 // SHIP CREATION SECTION END
 
