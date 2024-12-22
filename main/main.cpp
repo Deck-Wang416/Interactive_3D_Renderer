@@ -105,8 +105,8 @@ int main() try
 
 	//load shader program
 	ShaderProgram prog({
-		{ GL_VERTEX_SHADER, "assets/default.vert" },
-		{ GL_FRAGMENT_SHADER, "assets/default.frag" }
+		{ GL_VERTEX_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\default.vert" },
+		{ GL_FRAGMENT_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\default.frag" }
 		});
 
 	state.prog = &prog;
@@ -119,23 +119,23 @@ int main() try
 
 
 	// Load the map OBJ file
-	auto parlahti = load_wavefront_obj("assets/parlahti.obj");
+	auto parlahti = load_wavefront_obj("C:\\Users\\32939\\Desktop\\houge\\assets\\parlahti.obj");
 	
 	GLuint vao = create_vao(parlahti);
 	std::size_t vertexCount = parlahti.positions.size();
 
 
-	GLuint textures = load_texture_2d("assets/L4343A-4k.jpeg");
+	GLuint textures = load_texture_2d("C:\\Users\\32939\\Desktop\\houge\\assets\\L4343A-4k.jpeg");
 
 	//----------------------------------------------------------------
 	// Load shader program for launchpad
 	ShaderProgram prog2 = ShaderProgram({
-		{GL_VERTEX_SHADER, "assets/launch.vert"},
-		{GL_FRAGMENT_SHADER, "assets/launch.frag"}
+		{GL_VERTEX_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\launch.vert"},
+		{GL_FRAGMENT_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\launch.frag"}
 		});
 
 	// Load the launchpad
-	SimpleMeshData launch = load_wavefront_obj("assets/landingpad.obj");
+	SimpleMeshData launch = load_wavefront_obj("C:\\Users\\32939\\Desktop\\houge\\assets\\landingpad.obj");
 	std::size_t launchVertexCount = launch.positions.size();
 	std::vector<Vec3f> originalPositions(launch.positions.begin(), launch.positions.end());
 
@@ -186,8 +186,8 @@ int main() try
 	// loadTexture();
 	 //setupSpriteBuffers();
 	 ShaderProgram prog3({
-			 { GL_VERTEX_SHADER, "assets/points.vert" },
-			 { GL_FRAGMENT_SHADER, "assets/points.frag" }
+			 { GL_VERTEX_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\points.vert" },
+			 { GL_FRAGMENT_SHADER, "C:\\Users\\32939\\Desktop\\houge\\assets\\points.frag" }
 	 });
 	 loadTexture();
 	 setupSpriteBuffers();

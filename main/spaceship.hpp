@@ -12,7 +12,7 @@ int maxSprites = 6000;
 
 
 void loadTexture() { 
-	texture = load_texture_2d("assets/fire.jpg"); 
+	texture = load_texture_2d("C:\\Users\\32939\\Desktop\\houge\\assets\\fire.jpg"); 
 	glGetError();
 }
 
