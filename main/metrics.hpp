@@ -21,159 +21,166 @@ struct MetricsData {
 };
 
 // task1.12
-class MetricsAnalyzer {
+class RenderMetricsTracker {
 private:
-    static constexpr size_t NUM_QUERIES = 8;
-    static constexpr size_t METRIC_HISTORY_LIMIT = 5;
+    static const size_t QUERY_BUFFER_SIZE = 8;  // Total queries used for tracking
+    static const size_t MAX_HISTORY_DEPTH = 5; // Maximum number of frames to track
 
-    std::array<GLuint, NUM_QUERIES> queryIDs;
-    std::deque<MetricsData> metricRecords;
-    bool isSupported;
+    std::array<GLuint, QUERY_BUFFER_SIZE> gpuTimers;  // GPU timer queries
+    std::deque<MetricsData> historyBuffer;           // History of recorded metrics
+    bool featureEnabled;                             // Indicates support for GPU queries
 
-    std::chrono::steady_clock::time_point timeFrameStart;
-    std::chrono::steady_clock::time_point timeCommandStart;
+    std::chrono::steady_clock::time_point frameStartTime;  // Frame start timestamp
+    std::chrono::steady_clock::time_point commandStartTime; // Command submission start
+
+    struct InternalStatus {
+        bool initialized = false;
+        bool errorOccurred = false;
+    };
+
+    InternalStatus statusFlags;
 
 public:
-    MetricsAnalyzer() : isSupported(false) {
-        GLint counterCapabilities = 0;
-        glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &counterCapabilities);
+    RenderMetricsTracker() : featureEnabled(false) {
+        GLint timestampCapability = 0;
+        glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &timestampCapability);
 
-        if (counterCapabilities == 0) {
-            printf("\n[!] METRIC SYSTEM NOT AVAILABLE: GPU lacks GL_TIMESTAMP support.\n");
+        if (timestampCapability == 0) {
+            printf("[WARNING] GPU lacks support for GL_TIMESTAMP.\n");
+            featureEnabled = false;
             return;
         }
 
-        isSupported = true;
-        glGenQueries(NUM_QUERIES, queryIDs.data());
+        featureEnabled = true;
+
+        glGenQueries(QUERY_BUFFER_SIZE, gpuTimers.data());
         if (glGetError() != GL_NO_ERROR) {
-            printf("\n[!] METRIC INIT FAILURE: Could not initialize query objects.\n");
-            isSupported = false;
+            printf("[ERROR] Failed to initialize GPU query objects.\n");
+            featureEnabled = false;
             return;
         }
 
-        for (size_t i = 0; i < METRIC_HISTORY_LIMIT; ++i) {
-            metricRecords.emplace_back();
+        for (size_t i = 0; i < MAX_HISTORY_DEPTH; ++i) {
+            historyBuffer.emplace_back();
+        }
+        statusFlags.initialized = true;
+    }
+
+    ~RenderMetricsTracker() {
+        if (featureEnabled) {
+            glDeleteQueries(QUERY_BUFFER_SIZE, gpuTimers.data());
         }
     }
 
-    ~MetricsAnalyzer() {
-        if (isSupported) {
-            glDeleteQueries(NUM_QUERIES, queryIDs.data());
+    void startFrame() {
+        frameStartTime = std::chrono::steady_clock::now();
+        if (featureEnabled) {
+            glQueryCounter(gpuTimers[0], GL_TIMESTAMP);
         }
     }
 
-    void recordFrameStart() {
-        timeFrameStart = std::chrono::steady_clock::now();
-        if (isSupported) {
-            glQueryCounter(queryIDs[0], GL_TIMESTAMP);
+    void beginTrackingEvent(GLuint eventIndex) {
+        if (featureEnabled) {
+            glQueryCounter(gpuTimers[eventIndex], GL_TIMESTAMP);
         }
     }
 
-    void recordEventStart(GLuint queryIndex) {
-        if (isSupported) {
-            glQueryCounter(queryIDs[queryIndex], GL_TIMESTAMP);
+    void endTrackingEvent(GLuint eventIndex) {
+        if (featureEnabled) {
+            glQueryCounter(gpuTimers[eventIndex + 1], GL_TIMESTAMP);
         }
     }
 
-    void recordEventEnd(GLuint queryIndex) {
-        if (isSupported) {
-            glQueryCounter(queryIDs[queryIndex + 1], GL_TIMESTAMP);
-        }
+    void recordCommandStart() {
+        commandStartTime = std::chrono::steady_clock::now();
     }
 
-    void recordCommandSubmission() {
-        timeCommandStart = std::chrono::steady_clock::now();
-    }
-
-    void recordFrameEnd() {
-        if (!isSupported) {
+    void completeFrame() {
+        if (!featureEnabled) {
             return;
         }
 
-        glQueryCounter(queryIDs[1], GL_TIMESTAMP);
-        auto timeFrameEnd = std::chrono::steady_clock::now();
+        glQueryCounter(gpuTimers[1], GL_TIMESTAMP);
+        auto frameEndTime = std::chrono::steady_clock::now();
 
-        auto frameDurationCPU = timeFrameEnd - timeFrameStart;
-        auto commandLatencyCPU = timeFrameEnd - timeCommandStart;
+        auto cpuFrameDuration = frameEndTime - frameStartTime;
+        auto cpuCommandDuration = frameEndTime - commandStartTime;
 
-        GLuint64 startTotalGPU = 0, endTotalGPU = 0;
-        GLuint64 sectionStartA = 0, sectionEndA = 0;
-        GLuint64 sectionStartB = 0, sectionEndB = 0;
-        GLuint64 sectionStartC = 0, sectionEndC = 0;
+        GLuint64 gpuStart = 0, gpuEnd = 0;
+        GLuint64 gpuSectionStart1 = 0, gpuSectionEnd1 = 0;
+        GLuint64 gpuSectionStart2 = 0, gpuSectionEnd2 = 0;
+        GLuint64 gpuSectionStart3 = 0, gpuSectionEnd3 = 0;
 
-        GLint isAvailable = 0;
-        int retryCount = 0;
-        constexpr int MAX_RETRY_LIMIT = 500;
+        GLint resultAvailable = 0;
+        int retryAttempts = 0;
+        constexpr int MAX_RETRIES = 500;
 
-        while (!isAvailable && retryCount < MAX_RETRY_LIMIT) {
-            glGetQueryObjectiv(queryIDs[1], GL_QUERY_RESULT_AVAILABLE, &isAvailable);
-            if (!isAvailable) {
+        while (!resultAvailable && retryAttempts < MAX_RETRIES) {
+            glGetQueryObjectiv(gpuTimers[1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+            if (!resultAvailable) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                retryCount++;
+                retryAttempts++;
             }
         }
 
-        if (!isAvailable) {
-            printf("\n[!] METRIC TIMEOUT: Failed to retrieve query results within retry limit.\n");
+        if (!resultAvailable) {
+            printf("[ERROR] Timed out while waiting for query results.\n");
             return;
         }
 
-        glGetQueryObjectui64v(queryIDs[0], GL_QUERY_RESULT, &startTotalGPU);
-        glGetQueryObjectui64v(queryIDs[1], GL_QUERY_RESULT, &endTotalGPU);
-        glGetQueryObjectui64v(queryIDs[2], GL_QUERY_RESULT, &sectionStartA);
-        glGetQueryObjectui64v(queryIDs[3], GL_QUERY_RESULT, &sectionEndA);
-        glGetQueryObjectui64v(queryIDs[4], GL_QUERY_RESULT, &sectionStartB);
-        glGetQueryObjectui64v(queryIDs[5], GL_QUERY_RESULT, &sectionEndB);
-        glGetQueryObjectui64v(queryIDs[6], GL_QUERY_RESULT, &sectionStartC);
-        glGetQueryObjectui64v(queryIDs[7], GL_QUERY_RESULT, &sectionEndC);
+        glGetQueryObjectui64v(gpuTimers[0], GL_QUERY_RESULT, &gpuStart);
+        glGetQueryObjectui64v(gpuTimers[1], GL_QUERY_RESULT, &gpuEnd);
+        glGetQueryObjectui64v(gpuTimers[2], GL_QUERY_RESULT, &gpuSectionStart1);
+        glGetQueryObjectui64v(gpuTimers[3], GL_QUERY_RESULT, &gpuSectionEnd1);
+        glGetQueryObjectui64v(gpuTimers[4], GL_QUERY_RESULT, &gpuSectionStart2);
+        glGetQueryObjectui64v(gpuTimers[5], GL_QUERY_RESULT, &gpuSectionEnd2);
+        glGetQueryObjectui64v(gpuTimers[6], GL_QUERY_RESULT, &gpuSectionStart3);
+        glGetQueryObjectui64v(gpuTimers[7], GL_QUERY_RESULT, &gpuSectionEnd3);
 
-        MetricsData metrics{
-            endTotalGPU - startTotalGPU,
-            sectionEndA - sectionStartA,
-            sectionEndB - sectionStartB,
-            sectionEndC - sectionStartC,
-            std::chrono::duration_cast<std::chrono::nanoseconds>(frameDurationCPU),
-            std::chrono::duration_cast<std::chrono::nanoseconds>(commandLatencyCPU)
+        MetricsData frameMetrics{
+            gpuEnd - gpuStart,
+            gpuSectionEnd1 - gpuSectionStart1,
+            gpuSectionEnd2 - gpuSectionStart2,
+            gpuSectionEnd3 - gpuSectionStart3,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(cpuFrameDuration),
+            std::chrono::duration_cast<std::chrono::nanoseconds>(cpuCommandDuration)
         };
 
-        if (metricRecords.size() >= METRIC_HISTORY_LIMIT) {
-            metricRecords.pop_front();
+        if (historyBuffer.size() >= MAX_HISTORY_DEPTH) {
+            historyBuffer.pop_front();
         }
-        metricRecords.push_back(metrics);
+        historyBuffer.push_back(frameMetrics);
     }
 
-    void printMetricsSummary() const {
-        if (!isSupported || metricRecords.empty()) {
+    void displaySummary() const {
+        if (!featureEnabled || historyBuffer.empty()) {
             return;
         }
 
-        GLuint64 totalTimeGPU = 0, timeSectionA = 0, timeSectionB = 0, timeSectionC = 0;
-        std::chrono::nanoseconds totalTimeFrameCPU{0}, totalTimeCmdCPU{0};
+        GLuint64 totalGpuTime = 0, time1 = 0, time2 = 0, time3 = 0;
+        std::chrono::nanoseconds totalCpuFrameTime{0}, totalCpuCmdTime{0};
 
-        for (const auto& record : metricRecords) {
-            totalTimeGPU += record.gpuTotalTime;
-            timeSectionA += record.gpuTimeSectionA;
-            timeSectionB += record.gpuTimeSectionB;
-            timeSectionC += record.gpuTimeSectionC;
-            totalTimeFrameCPU += record.cpuTimeFrame;
-            totalTimeCmdCPU += record.cpuTimeCommands;
+        for (const auto& metrics : historyBuffer) {
+            totalGpuTime += metrics.gpuTotalTime;
+            time1 += metrics.gpuTimeSectionA;
+            time2 += metrics.gpuTimeSectionB;
+            time3 += metrics.gpuTimeSectionC;
         }
 
-        size_t totalFrames = metricRecords.size();
+        size_t trackedFrames = historyBuffer.size();
 
-        printf("\n===== PERFORMANCE METRICS REPORT =====\n");
-        printf("> Tracked Frames: %zu\n", totalFrames);
-        printf("> GPU Metrics:\n");
-        printf("    - Overall Render Time: %.3f ms/frame\n", (totalTimeGPU / totalFrames) / 1000000.0);
-        printf("    - Section A Time: %.3f ms/frame\n", (timeSectionA / totalFrames) / 1000000.0);
-        printf("    - Section B Time: %.3f ms/frame\n", (timeSectionB / totalFrames) / 1000000.0);
-        printf("    - Section C Time: %.3f ms/frame\n", (timeSectionC / totalFrames) / 1000000.0);
-        printf("> CPU Metrics:\n");
-        printf("    - Frame Processing Time: %.3f ms/frame\n", totalTimeFrameCPU.count() / (totalFrames * 1000000.0));
-        printf("    - Command Submission Time: %.3f ms/frame\n", totalTimeCmdCPU.count() / (totalFrames * 1000000.0));
-        printf("=======================================\n");
+        printf("\n[METRICS REPORT]\n");
+        printf("Frames: %zu\n", trackedFrames);
+        printf("GPU: Total: %.2fms, A: %.2fms, B: %.2fms, C: %.2fms\n",
+               (totalGpuTime / trackedFrames) / 1e6,
+               (time1 / trackedFrames) / 1e6,
+               (time2 / trackedFrames) / 1e6,
+               (time3 / trackedFrames) / 1e6);
+        printf("CPU: Frame: %.2fms, Commands: %.2fms\n",
+               totalCpuFrameTime.count() / (trackedFrames * 1e6),
+               totalCpuCmdTime.count() / (trackedFrames * 1e6));
     }
 };
-#endif
 
+#endif
 #endif
