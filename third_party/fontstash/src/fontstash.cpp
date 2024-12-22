@@ -4,6 +4,12 @@
 
 #include <stdio.h>
 #include <stddef.h>
+#include <stdlib.h>
+
+#ifdef _WIN32
+#	define WIN32_LEAN_AND_MEAN 1
+#	include <windows.h>
+#endif
 
 #if defined(__GNUC__)
 #	pragma GCC diagnostic ignored "-Wconversion"
