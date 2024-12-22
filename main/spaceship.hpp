@@ -1,5 +1,4 @@
 #include "mesh_renderer.hpp"
-#include <gl/GL.h>
 
 struct Sprite {
 	Vec3f position;
