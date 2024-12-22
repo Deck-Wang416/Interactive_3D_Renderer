@@ -102,16 +102,25 @@ void generateSprites(Vec3f spaceshipPosition, int spriteAmount, Vec3f direction)
 	}
 }
 
-void updateSprites( float dt ) {
-	// Update position and TTL
-	for (auto& sprite : sprites) {
-		sprite.position += sprite.velocity * dt;
-		sprite.lifespan -= dt;
-	}
+void updateSprites(float dt) {
+    // Update position and TTL
+    for (size_t i = 0; i < sprites.size(); ++i) {
+        sprites[i].position.x += sprites[i].velocity.x * dt;
+        sprites[i].position.y += sprites[i].velocity.y * dt;
+        sprites[i].position.z += sprites[i].velocity.z * dt;
+        sprites[i].lifespan -= dt;
+    }
 
-	// Remove dead sprites
-	sprites.erase(std::remove_if(sprites.begin(), sprites.end(),
-		[](const Sprite& sprite) { return sprite.lifespan <= 0; }), sprites.end());
+    // Remove dead sprites (manual iteration)
+    std::vector<Sprite> updatedSprites;
+    for (size_t i = 0; i < sprites.size(); ++i) {
+        if (sprites[i].lifespan > 0) {
+            updatedSprites.push_back(sprites[i]);
+        }
+    }
+
+    // Replace the original vector with the updated one
+    sprites = updatedSprites;
 }
 
 void renderSprites(Mat44f project2World, GLuint shader) {
