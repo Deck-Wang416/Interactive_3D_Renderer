@@ -9,8 +9,6 @@ SimpleMeshData make_cone( bool aCapped, std::size_t aSubdivs, Vec3f aColor, Mat4
 	float prevZ = std::sin(0.f);
 
 	Vec3f capCenter = Vec3f{ 0.f, 0.f, 0.f }; 
-	Vec3f capNormalOut = Vec3f{ 1.f, 0.f, 0.f };
-	Vec3f capNormalIn = Vec3f{ -1.f, 0.f, 0.f };
 
 	if (aCapped)
 	{
@@ -56,7 +54,7 @@ SimpleMeshData make_cone( bool aCapped, std::size_t aSubdivs, Vec3f aColor, Mat4
 	}
 	else
 	{
-		const float fullCircle = 2.f * 3.1415926535897932384626433832795f; // 2¦Ð
+		const float fullCircle = 2.f * 3.1415926535897932384626433832795f; // 2ï¿½ï¿½
 		for (std::size_t i = 0; i < aSubdivs; ++i)
 		{
 			// cur angle

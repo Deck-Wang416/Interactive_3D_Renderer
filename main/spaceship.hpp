@@ -141,7 +141,6 @@ void renderSprites(Mat44f project2World, GLuint shader) {
 inline SimpleMeshData spaceship() {
 
 	// Color definitions with obfuscated variable names
-	Vec3f mainClr = { 0.35f, 0.35f, 0.3f };
 	Vec3f legClr = { 1.f, 0.514f, 0.737f };
 	Vec3f bodyClr = { 0.8f, 0.f, 0.404f };
 	Vec3f baseClr = { 0.992f, 0.510f, 0.184f };
@@ -186,7 +185,7 @@ inline SimpleMeshData spaceship() {
 	SimpleMeshData finalSpaceship = concatenate(tempNine, connTwo);
 
 	// Scale spaceship down
-	for (int i = 0; i < finalSpaceship.positions.size(); ++i) {
+	for (int i = 0; (long unsigned int)i < finalSpaceship.positions.size(); ++i) {
 		finalSpaceship.positions[i] *= 0.18;
 	}
 
