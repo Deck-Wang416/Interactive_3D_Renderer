@@ -1,4 +1,276 @@
-#include "spaceship.hpp"
+#include <glad.h>
+#include <GLFW/glfw3.h>
+
+#include <typeinfo>
+#include <stdexcept>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <random>
+
+#include "../support/error.hpp"
+#include "../support/program.hpp"
+#include "../support/checkpoint.hpp"
+#include "../support/debug_output.hpp"
+
+#include "../vmlib/vec4.hpp"
+#include "../vmlib/mat44.hpp"
+#include "../vmlib/mat33.hpp"
+
+#include "defaults.hpp"
+
+#include "cylinder.hpp"
+#include "cone.hpp"
+#include "loadobj.hpp"
+#include "simple_mesh.hpp"
+#include "loadcustom.hpp"
+
+#include "cube.hpp"
+#include "texture.hpp"
+
+#include "fontstash.h"
+
+namespace
+{
+	constexpr char const* kWindowTitle = "COMP3811 - CW2";
+
+	constexpr float kPi_ = 3.1415926f;
+
+	float kMovementPerSecond_ = 5.f; // units per second
+	float kMouseSensitivity_ = 0.01f; // radians per pixel
+	struct State_ //struct for camera control
+	{
+		ShaderProgram* prog;
+
+		struct CamCtrl_
+		{
+			bool cameraActive;
+			bool actionZoomIn, actionZoomOut;
+			bool actionZoomleft, actionZoomRight;
+			bool actionMoveForward, actionMoveBackward;
+			bool actionMoveLeft, actionMoveRight;
+			bool actionMoveUp, actionMoveDown;
+
+			float phi, theta;
+			float radius;
+			Vec3f movementVec;
+
+			float lastX, lastY;
+		} camControl;
+
+		// spaceship
+		bool moveUp = false;
+		float spaceshipOrigin = 0.f;
+		float spaceshipCurve = 0.f;
+		float acceleration = 0.1f;
+		float curve = 0.f;
+	};
+
+	void glfw_callback_error_(int, char const*);
+	void glfw_callback_key_(GLFWwindow*, int, int, int, int);
+	void glfw_callback_motion_(GLFWwindow*, double, double); //function for mouse motion
+
+	struct GLFWCleanupHelper
+	{
+		~GLFWCleanupHelper();
+	};
+	struct GLFWWindowDeleter
+	{
+		~GLFWWindowDeleter();
+		GLFWwindow* window;
+	};
+
+}
+
+
+struct Sprite {
+	Vec3f position;
+	Vec3f velocity;
+	float lifespan;
+};
+
+std::vector<Sprite> sprites;
+GLuint texture, VBO, VAO;
+int maxSprites = 6000;
+
+
+void loadTexture() { 
+	texture = load_texture_2d("assets/fire.jpg"); 
+	glGetError();
+}
+
+void setupSpriteBuffers() {
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, maxSprites * 3 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0); 
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+}
+
+std::mt19937 createRandomEngine() {
+	std::random_device rd;
+	return std::mt19937(rd());
+}
+
+std::uniform_real_distribution<> createUniformDistribution(double min, double max) {
+	return std::uniform_real_distribution<>(min, max);
+}
+
+float generateRandomValue(std::mt19937& gen, std::uniform_real_distribution<>& dis) {
+	return dis(gen);
+}
+
+Vec3f computeDirection(float phi, float theta) {
+	Vec3f randomDirection;
+	randomDirection.x = sin(phi) * cos(theta);
+	randomDirection.y = sin(phi) * sin(theta);
+	randomDirection.z = cos(phi);
+	return randomDirection;
+}
+
+Vec3f randomConicalDirection(Vec3f direction) {
+	// Initialize random engine and distribution
+	static std::mt19937 gen = createRandomEngine();
+	static std::uniform_real_distribution<> dis(0, 1);
+
+	// Generate random spherical coordinates
+	float theta = 2 * kPi_ * generateRandomValue(gen, dis);
+	float phi = acos(1 - generateRandomValue(gen, dis) * (1 - cos(45)));
+
+	// Compute and return random direction
+	return computeDirection(phi, theta);
+}
+
+void updateSpritePositions(const std::vector<Sprite>& sprites) {
+	// Preallocate memory for positions
+	std::vector<float> positions;
+	positions.reserve(sprites.size() * 3);
+
+	// Populate positions vector
+	for (size_t i = 0; i < sprites.size(); ++i) {
+		const Sprite& s = sprites[i];
+		positions.emplace_back(s.position.x);
+		positions.emplace_back(s.position.y);
+		positions.emplace_back(s.position.z);
+	}
+
+	// Bind VBO and upload data
+	GLsizeiptr dataSize = positions.size() * sizeof(float);
+	const void* bufferData = positions.data();
+	GLenum usage = GL_DYNAMIC_DRAW;
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, dataSize, bufferData, usage);
+
+	// Unbind buffer
+	GLenum target = GL_ARRAY_BUFFER;
+	glBindBuffer(target, 0);
+}
+
+void generateSprites(Vec3f spaceshipPosition, int spriteAmount, Vec3f direction) {
+	for (int i = 0; i < spriteAmount; i++)
+	{
+		Sprite sprite;
+		sprite.position = spaceshipPosition;
+		sprite.velocity = randomConicalDirection(direction);
+		sprite.lifespan = 0.5f;
+		sprites.emplace_back(sprite);
+	}
+}
+
+void updateSprites(float dt) {
+    for (size_t i = 0; i < sprites.size(); ++i) {
+        sprites[i].position.x += sprites[i].velocity.x * dt;
+        sprites[i].position.y += sprites[i].velocity.y * dt;
+        sprites[i].position.z += sprites[i].velocity.z * dt;
+        sprites[i].lifespan -= dt;
+    }
+
+    // Remove dead sprites (manual iteration)
+    std::vector<Sprite> updatedSprites;
+    for (size_t i = 0; i < sprites.size(); ++i) {
+        if (sprites[i].lifespan > 0) {
+            updatedSprites.push_back(sprites[i]);
+        }
+    }
+
+    // Replace the original vector with the updated one
+    sprites = updatedSprites;
+}
+
+void renderSprites(Mat44f project2World, GLuint shader) {
+	glEnable(GL_BLEND); 
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE); 
+	glActiveTexture(GL_TEXTURE0); 
+	glBindTexture(GL_TEXTURE_2D, texture);  
+	glUseProgram(shader);
+	glEnable(GL_PROGRAM_POINT_SIZE);
+	glUniformMatrix4fv(0,1, GL_TRUE,project2World.v);
+	glUniform1i(1, 0); 
+	glBindVertexArray(VAO);
+	glDrawArrays(GL_POINTS, 0, sprites.size()); 
+	glBindVertexArray(0); 
+	glDisable(GL_BLEND);
+}
+
+inline SimpleMeshData spaceship() {
+
+	// Color definitions with obfuscated variable names
+	Vec3f legClr = { 1.f, 0.514f, 0.737f };
+	Vec3f bodyClr = { 0.8f, 0.f, 0.404f };
+	Vec3f baseClr = { 0.992f, 0.510f, 0.184f };
+	Vec3f cubeClr = { 0.976f, 0.294f, 0.f };
+
+	// Body creation
+	SimpleMeshData bdyLeft = make_cone(false, size_t(64), bodyClr, make_translation({ 0.f, 2.5f, 0.f }));
+	SimpleMeshData bdyRight = make_cone(false, size_t(64), bodyClr, make_translation({ 0.f, 2.5f, 0.f }) * make_rotation_z(angleToRadians(180)));
+	SimpleMeshData mainBody = concatenate(bdyLeft, bdyRight);
+
+	// Legs creation with intermediate results
+	SimpleMeshData lOne = make_cylinder(true, size_t(64), legClr, make_translation({ 0.f, 2.5f, 0.f }) * make_rotation_z(angleToRadians(-45)) * make_scaling(2.f, 0.1f, 0.1f));
+	SimpleMeshData tempOne = concatenate(mainBody, lOne);
+
+	SimpleMeshData lTwo = make_cylinder(true, size_t(64), legClr, make_translation({ 0.f, 2.5f, 0.f }) * make_rotation_z(angleToRadians(-135)) * make_scaling(2.f, 0.1f, 0.1f));
+	SimpleMeshData tempTwo = concatenate(tempOne, lTwo);
+
+	SimpleMeshData lThree = make_cylinder(true, size_t(64), legClr, make_translation({ 0.f, 2.5f, 0.f }) * make_rotation_y(angleToRadians(90)) * make_rotation_z(angleToRadians(-45)) * make_scaling(2.f, 0.1f, 0.1f));
+	SimpleMeshData tempThree = concatenate(tempTwo, lThree);
+
+	SimpleMeshData lFour = make_cylinder(true, size_t(64), legClr, make_translation({ 0.f, 2.5f, 0.f }) * make_rotation_y(angleToRadians(-90)) * make_rotation_z(angleToRadians(-45)) * make_scaling(2.f, 0.1f, 0.1f));
+	SimpleMeshData tempFour = concatenate(tempThree, lFour);
+
+	// Feet creation
+	SimpleMeshData fOne = make_cylinder(true, size_t(64), cubeClr, make_translation({ -1.3f, 1.f, 0.0f }) * make_scaling(0.4f, 0.4f, 0.4f));
+	SimpleMeshData tempFive = concatenate(tempFour, fOne);
+
+	SimpleMeshData fTwo = make_cylinder(true, size_t(64), cubeClr, make_translation({ 1.3f, 1.f, 0.0f }) * make_scaling(0.4f, 0.4f, 0.4f));
+	SimpleMeshData tempSix = concatenate(tempFive, fTwo);
+
+	SimpleMeshData fThree = make_cylinder(true, size_t(64), cubeClr, make_translation({ 0.f, 1.f, -1.3f }) * make_scaling(0.4f, 0.4f, 0.4f));
+	SimpleMeshData tempSeven = concatenate(tempSix, fThree);
+
+	SimpleMeshData fFour = make_cylinder(true, size_t(64), cubeClr, make_translation({ 0.0f, 1.f, 1.3f }) * make_scaling(0.4f, 0.4f, 0.4f));
+	SimpleMeshData tempEight = concatenate(tempSeven, fFour);
+
+	// Connector bars
+	SimpleMeshData connOne = make_cube(baseClr, make_translation({ -0.f, 1.f, 1.2f }) * make_rotation_y(angleToRadians(90)) * make_scaling(2.4f, 0.1f, 0.1f));
+	SimpleMeshData tempNine = concatenate(tempEight, connOne);
+
+	SimpleMeshData connTwo = make_cube(baseClr, make_translation({ -1.2f, 1.f, 0.f }) * make_scaling(2.4f, 0.1f, 0.1f));
+	SimpleMeshData finalSpaceship = concatenate(tempNine, connTwo);
+
+	// Scale spaceship down
+	for (int i = 0; (long unsigned int)i < finalSpaceship.positions.size(); ++i) {
+		finalSpaceship.positions[i] *= 0.18;
+	}
+
+	return finalSpaceship;
+}
 
 int main() try
 {
@@ -147,7 +419,7 @@ int main() try
 		};
 
 	// Move the first launch object
-	adjustLaunchPositions(launch, Vec3f{ 0.f, -0.975f, -50.f });
+	adjustLaunchPositions(launch, Vec3f{ 0.f, -0.975f, -60.f });
 
 	// Create VAO for the first launchpad
 	GLuint launch_vao_1 = create_vao(launch);
@@ -156,7 +428,7 @@ int main() try
 	launch.positions.assign(originalPositions.begin(), originalPositions.end());
 
 	// Move the second launch object
-	adjustLaunchPositions(launch, Vec3f{ -20.f, -0.975f, -15.f });
+	adjustLaunchPositions(launch, Vec3f{ -20.f, -0.975f, -10.f });
 
 	// Create VAO for the second launchpad
 	GLuint launch_vao_2 = create_vao(launch);
@@ -172,7 +444,7 @@ int main() try
 	 // Move the ship
 	 for (size_t i = 0; i < shipVertexCount; i++)
 	 {
-		 ship.positions[i] = ship.positions[i] + Vec3f{ -20.f, -1.125f, -15.f };
+		 ship.positions[i] = ship.positions[i] + Vec3f{ -20.f, -1.125f, -10.f };
 	 }
 
 	 // Create VAO for the ship
@@ -584,148 +856,108 @@ namespace
 			return;
 		}
 
-		if (auto* state = static_cast<State_*>(glfwGetWindowUserPointer(aWindow)))
-		{
-			// R-key reloads shaders.
-			if (GLFW_KEY_R == aKey && GLFW_PRESS == aAction)
-			{
-				if (state->prog)
-				{
-					try
-					{
-						state->prog->reload();
+		if (auto* st = static_cast<State_*>(glfwGetWindowUserPointer(aWindow))) {
+			// Shader reload functionality
+			if (GLFW_KEY_R == aKey && GLFW_PRESS == aAction) {
+				if (st->prog) {
+					try {
+						st->prog->reload();
 						std::fprintf(stderr, "Shaders reloaded and recompiled.\n");
 					}
-					catch (std::exception const& eErr)
-					{
+					catch (std::exception const& ex) {
 						std::fprintf(stderr, "Error when reloading shader:\n");
-						std::fprintf(stderr, "%s\n", eErr.what());
+						std::fprintf(stderr, "%s\n", ex.what());
 						std::fprintf(stderr, "Keeping old shader.\n");
 					}
 				}
 			}
 
-			// TODO SHIFT INCREASES SPEED
-
-			if (GLFW_KEY_LEFT_SHIFT == aKey && GLFW_PRESS == aAction)
-				kMovementPerSecond_ *= 10.f;
-			else if (GLFW_KEY_LEFT_SHIFT == aKey && GLFW_RELEASE == aAction)
-				kMovementPerSecond_ /= 10.f;
-
-
-			// TODO CTRL DECREASES SPEED
-			if (GLFW_KEY_LEFT_CONTROL == aKey && GLFW_PRESS == aAction) 
-				kMovementPerSecond_ /= 2.f;
-			else if (GLFW_KEY_LEFT_CONTROL == aKey && GLFW_RELEASE == aAction)
-				kMovementPerSecond_ *= 2.f;
-
-
-			// Space toggles camera
-			if (GLFW_KEY_SPACE == aKey && GLFW_PRESS == aAction)
-			{
-				state->camControl.cameraActive = !state->camControl.cameraActive;
-
-				if (state->camControl.cameraActive)
-					glfwSetInputMode(aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-				else
-					glfwSetInputMode(aWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			// Movement speed modification (SHIFT)
+			if (GLFW_KEY_LEFT_SHIFT == aKey) {
+				if (GLFW_PRESS == aAction) {
+					kMovementPerSecond_ *= 10.f;
+				}
+				else if (GLFW_RELEASE == aAction) {
+					kMovementPerSecond_ /= 10.f;
+				}
 			}
 
-			// Camera controls if camera is active
-			if (state->camControl.cameraActive)
-			{
-				if (GLFW_KEY_W == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveForward = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveForward = false;
+			// Movement speed modification (CTRL)
+			if (GLFW_KEY_LEFT_CONTROL == aKey) {
+				if (GLFW_PRESS == aAction) {
+					kMovementPerSecond_ /= 2.f;
 				}
-				else if (GLFW_KEY_S == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveBackward = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveBackward = false;
+				else if (GLFW_RELEASE == aAction) {
+					kMovementPerSecond_ *= 2.f;
 				}
-				else if (GLFW_KEY_A == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveLeft = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveLeft = false;
+			}
+
+			// Camera toggling with SPACE
+			if (GLFW_KEY_SPACE == aKey && GLFW_PRESS == aAction) {
+				st->camControl.cameraActive = !st->camControl.cameraActive;
+				if (st->camControl.cameraActive) {
+					glfwSetInputMode(aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 				}
-				else if (GLFW_KEY_D == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveRight = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveRight = false;
+				else {
+					glfwSetInputMode(aWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 				}
-				else if (GLFW_KEY_Q == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveDown = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveDown = false;
-				}
-				else if (GLFW_KEY_E == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						state->camControl.actionMoveUp = true;
-					else if (GLFW_RELEASE == aAction)
-						state->camControl.actionMoveUp = false;
-				}
-				else if (GLFW_KEY_RIGHT_SHIFT == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						kMovementPerSecond_ *= 2.f;
-					else if (GLFW_RELEASE == aAction)
-						kMovementPerSecond_ /= 2.f;
-				}
-				else if (GLFW_KEY_RIGHT_CONTROL == aKey)
-				{
-					if (GLFW_PRESS == aAction)
-						kMovementPerSecond_ /= 2.f;
-					else if (GLFW_RELEASE == aAction)
-						kMovementPerSecond_ *= 2.f;
-				}
+			}
+
+			// Camera movement controls
+			if (st->camControl.cameraActive) {
+				bool press = GLFW_PRESS == aAction;
+				bool release = GLFW_RELEASE == aAction;
+
+				if (GLFW_KEY_W == aKey) st->camControl.actionMoveForward = press ? true : (release ? false : st->camControl.actionMoveForward);
+				if (GLFW_KEY_S == aKey) st->camControl.actionMoveBackward = press ? true : (release ? false : st->camControl.actionMoveBackward);
+				if (GLFW_KEY_A == aKey) st->camControl.actionMoveLeft = press ? true : (release ? false : st->camControl.actionMoveLeft);
+				if (GLFW_KEY_D == aKey) st->camControl.actionMoveRight = press ? true : (release ? false : st->camControl.actionMoveRight);
+				if (GLFW_KEY_Q == aKey) st->camControl.actionMoveDown = press ? true : (release ? false : st->camControl.actionMoveDown);
+				if (GLFW_KEY_E == aKey) st->camControl.actionMoveUp = press ? true : (release ? false : st->camControl.actionMoveUp);
+
+				if (GLFW_KEY_RIGHT_SHIFT == aKey) kMovementPerSecond_ *= (press ? 2.f : (release ? 0.5f : 1.f));
+				if (GLFW_KEY_RIGHT_CONTROL == aKey) kMovementPerSecond_ *= (press ? 0.5f : (release ? 2.f : 1.f));
 			}
 
 			// Spaceship animation control
 			if (GLFW_KEY_F == aKey) {
-				state->moveUp = true;
-			} else if (GLFW_KEY_R == aKey) {
-				state->moveUp = false;
-				state->spaceshipOrigin = 0.f;
-				state->spaceshipCurve = 0.f;
-				state->curve = 0.005f;
-				state->acceleration = 0.1f;
+				st->moveUp = true;
+			}
+			else if (GLFW_KEY_R == aKey) {
+				st->moveUp = false;
+				st->spaceshipOrigin = 0.f;
+				st->spaceshipCurve = 0.f;
+				st->curve = 0.005f;
+				st->acceleration = 0.1f;
 			}
 		}
 	}
 
-	void glfw_callback_motion_(GLFWwindow* aWindow, double aX, double aY)
-	{
-		if (auto* state = static_cast<State_*>(glfwGetWindowUserPointer(aWindow)))
-		{
-			if (state->camControl.cameraActive)
-			{
-				auto const dx = float(aX - state->camControl.lastX);
-				auto const dy = float(aY - state->camControl.lastY);
+	void glfw_callback_motion_(GLFWwindow* wnd, double xPos, double yPos) {
+	    if (auto* st = static_cast<State_*>(glfwGetWindowUserPointer(wnd))) {
+	        if (st->camControl.cameraActive) {
+	            // Calculate delta movement for mouse
+	            float deltaX = float(xPos - st->camControl.lastX);
+	            float deltaY = float(yPos - st->camControl.lastY);
 
-				state->camControl.phi += dx * kMouseSensitivity_;
+	            // Update phi for horizontal rotation
+	            st->camControl.phi += deltaX * kMouseSensitivity_;
 
-				state->camControl.theta += dy * kMouseSensitivity_;
-				if (state->camControl.theta > kPi_ / 2.f)
-					state->camControl.theta = kPi_ / 2.f;
-				else if (state->camControl.theta < -kPi_ / 2.f)
-					state->camControl.theta = -kPi_ / 2.f;
-			}
+	            // Update theta for vertical rotation with clamping
+	            float newTheta = st->camControl.theta + deltaY * kMouseSensitivity_;
+	            if (newTheta > kPi_ / 2.f) {
+	                st->camControl.theta = kPi_ / 2.f;
+	            } else if (newTheta < -kPi_ / 2.f) {
+	                st->camControl.theta = -kPi_ / 2.f;
+	            } else {
+	                st->camControl.theta = newTheta;
+	            }
+	        }
 
-			state->camControl.lastX = float(aX);
-			state->camControl.lastY = float(aY);
-		}
+	        // Update last mouse positions
+	        st->camControl.lastX = float(xPos);
+	        st->camControl.lastY = float(yPos);
+	    }
 	}
 
 }
