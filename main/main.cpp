@@ -281,13 +281,6 @@ int main() try
 			Mat44f originToTranslation = make_translation(Vec3f{ -20.f, -1.125f, -15.f });
 			Mat44f translationMatrix = make_translation(Vec3f{ 0.f, state.spaceshipOrigin, state.spaceshipCurve });
 
-			Mat44f spaceshipTransform = buildTransformMatrix(
-				Vec3f{ 20.f, 1.125f, 15.f },
-				angleX,
-				Vec3f{ -20.f, -1.125f, -15.f },
-				Vec3f{ 0.f, state.spaceshipOrigin, state.spaceshipCurve }
-			);
-
 			// Sprite generation helper
 			auto generateMultipleSprites = [&](const Vec3f& basePos, float offsetX, float offsetY, float offsetZ, int count, const Vec3f& negOffset) {
 				generateSprites(basePos + Vec3f{ offsetX, offsetY, offsetZ }, count, negOffset);
