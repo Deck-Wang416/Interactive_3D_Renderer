@@ -387,10 +387,6 @@ int main() try
 	auto last = Clock::now();
 	float angle = 0.f;
 
-	//-------------------------------------------------------------------
-
-
-	// Load the map OBJ file
 	auto parlahti = load_wavefront_obj("assets/parlahti.obj");
 	
 	GLuint vao = create_vao(parlahti);
@@ -399,29 +395,23 @@ int main() try
 
 	GLuint textures = load_texture_2d("assets/L4343A-4k.jpeg");
 
-	//----------------------------------------------------------------
-	// Load shader program for launchpad
 	ShaderProgram prog2 = ShaderProgram({
 		{GL_VERTEX_SHADER, "assets/launch.vert"},
 		{GL_FRAGMENT_SHADER, "assets/launch.frag"}
 		});
 
-	// Load the launchpad
 	SimpleMeshData launch = load_wavefront_obj("assets/landingpad.obj");
 	std::size_t launchVertexCount = launch.positions.size();
 	std::vector<Vec3f> originalPositions(launch.positions.begin(), launch.positions.end());
 
-	// Helper function to move positions
 	auto adjustLaunchPositions = [&](SimpleMeshData& mesh, Vec3f offset) {
 		for (Vec3f& position : mesh.positions) {
 			position = position + offset;
 		}
 		};
 
-	// Move the first launch object
 	adjustLaunchPositions(launch, Vec3f{ 0.f, -0.975f, -60.f });
 
-	// Create VAO for the first launchpad
 	GLuint launch_vao_1 = create_vao(launch);
 
 	// Reset positions
@@ -433,15 +423,11 @@ int main() try
 	// Create VAO for the second launchpad
 	GLuint launch_vao_2 = create_vao(launch);
 
-	 // SHIP CREATION SECTION
-	//-------------------------------------------------------------------
 
-	 // Create the spaceship
 	 auto ship = spaceship();
 	 size_t shipVertexCount = ship.positions.size();
 
 
-	 // Move the ship
 	 for (size_t i = 0; i < shipVertexCount; i++)
 	 {
 		 ship.positions[i] = ship.positions[i] + Vec3f{ -20.f, -1.125f, -10.f };
@@ -449,14 +435,6 @@ int main() try
 
 	 // Create VAO for the ship
 	 GLuint ship_one_vao = create_vao(ship);
-
-	 //-------------------------------------------------------------------
-	 // SHIP CREATION SECTION END
-
-	//-------------------------------------------------------------------
-	// POINT SPRITE CREATION
-	// loadTexture();
-	 //setupSpriteBuffers();
 	 ShaderProgram prog3({
 			 { GL_VERTEX_SHADER, "assets/points.vert" },
 			 { GL_FRAGMENT_SHADER, "assets/points.frag" }
@@ -464,11 +442,8 @@ int main() try
 	 loadTexture();
 	 setupSpriteBuffers();
 	 
-	// POINT SPRITE CREATION END
-	//-------------------------------------------------------------------
 
 
-	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
 
 	// Main loop
@@ -477,7 +452,6 @@ int main() try
 		// Let GLFW process events
 		glfwPollEvents();
 
-		//generateSprites(Vec3f{ 1.f, 1.f, 1.f }, 10);
 		
 		// Check if window was resized.
 		float fbwidth, fbheight;
@@ -503,7 +477,6 @@ int main() try
 		}
 
 		//TODO: update state
-		// Time calculations
 		auto calculateDeltaTime = [&](Clock::time_point& lastTime) {
 			auto now = Clock::now();
 			float deltaTime = std::chrono::duration_cast<Secondsf>(now - lastTime).count();
@@ -519,7 +492,6 @@ int main() try
 
 		Mat44f model2World = make_rotation_y(0);
 
-		// Spaceship animation
 		auto updateSpaceshipWorldMatrix = [&]() -> Mat44f {
 			if (!state.moveUp) return model2World;
 
@@ -542,7 +514,6 @@ int main() try
 			Mat44f originToTranslation = make_translation(Vec3f{ -20.f, -1.125f, -15.f });
 			Mat44f translationMatrix = make_translation(Vec3f{ 0.f, state.spaceshipOrigin, state.spaceshipCurve });
 
-			// Sprite generation helper
 			auto generateMultipleSprites = [&](const Vec3f& basePos, float offsetX, float offsetY, float offsetZ, int count, const Vec3f& negOffset) {
 				generateSprites(basePos + Vec3f{ offsetX, offsetY, offsetZ }, count, negOffset);
 				};
@@ -561,10 +532,9 @@ int main() try
 
 		Mat44f spaceship2World = updateSpaceshipWorldMatrix();
 
-		// Normal matrix
+		// matrix
 		Mat33f normalMatrix = mat44_to_mat33(transpose(invert(model2World)));
 
-		// Camera transformations
 		auto updateCameraMovement = [&](float dt) {
 			float sinPhi = sin(state.camControl.phi);
 			float cosPhi = cos(state.camControl.phi);
@@ -611,25 +581,19 @@ int main() try
 
 		Mat44f projCameraWorld = projection * (world2Camera * model2World);
 		Mat44f spaceshipModel2World = projection * (world2Camera * spaceship2World);
-
-		// Sprite updates
 		updateSprites(dt);
 		updateSpritePositions(sprites);
 
-		//ENDOF TODO
 
 		// Draw scene
 		OGL_CHECKPOINT_DEBUG();
 
-		//TODO: draw frame
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		renderSprites(projCameraWorld, prog3.programId());
 	
-		// Draw the map
 		glUseProgram(prog.programId());
 
-		// Set projection-camera-world matrix
 		glUniformMatrix4fv(
 			0,
 			1,
@@ -637,7 +601,6 @@ int main() try
 			projCameraWorld.v
 		);
 
-		// Set normal matrix
 		glUniformMatrix3fv(
 			1,
 			1,
@@ -645,16 +608,13 @@ int main() try
 			normalMatrix.v
 		);
 
-		// Set lighting uniforms
 		Vec3f lightDir = normalize(Vec3f{ 0.f, 1.f, -1.f });
-		glUniform3fv(2, 1, &lightDir.x);      // Ambient light direction
-		glUniform3f(3, 0.9f, 0.9f, 0.9f);    // Diffusion
-		glUniform3f(4, 0.05f, 0.05f, 0.05f); // Spectral highlights
+		glUniform3fv(2, 1, &lightDir.x);     
+		glUniform3f(3, 0.9f, 0.9f, 0.9f);   
+		glUniform3f(4, 0.05f, 0.05f, 0.05f); 
 
-		// Bind vertex array object
 		glBindVertexArray(vao);
 
-		// Bind texture if available
 		if (textures != 0) {
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, textures);
@@ -663,34 +623,28 @@ int main() try
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 
-		// Issue draw call
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 
-		// Draw the first launchpad
 		glUseProgram(prog2.programId());
 
-		// Set projection-camera-world matrix
 		auto setUniformMatrix4fv = [](GLuint location, const Mat44f& matrix) {
 			glUniformMatrix4fv(location, 1, GL_TRUE, matrix.v);
 			};
 		setUniformMatrix4fv(0, projCameraWorld);
 
-		// Set normal matrix
 		auto setUniformMatrix3fv = [](GLuint location, const Mat33f& matrix) {
 			glUniformMatrix3fv(location, 1, GL_TRUE, matrix.v);
 			};
 		setUniformMatrix3fv(1, normalMatrix);
 
-		// Set lighting uniforms
 		auto setLightingUniforms = []() {
 			Vec3f lightDirection = normalize(Vec3f{ 0.f, 1.f, -1.f });
-			glUniform3fv(2, 1, &lightDirection.x); // Ambient light direction
-			glUniform3f(3, 0.9f, 0.9f, 0.9f);     // Diffusion
-			glUniform3f(4, 0.05f, 0.05f, 0.05f);  // Specular
+			glUniform3fv(2, 1, &lightDirection.x);
+			glUniform3f(3, 0.9f, 0.9f, 0.9f);
+			glUniform3f(4, 0.05f, 0.05f, 0.05f);
 			};
 		setLightingUniforms();
 
-		// Bind texture
 		auto bindTexture = [](GLuint textureId) {
 			if (textureId != 0) {
 				glActiveTexture(GL_TEXTURE0);
@@ -700,9 +654,8 @@ int main() try
 				glBindTexture(GL_TEXTURE_2D, 0);
 			}
 			};
-		bindTexture(0); // Since textureObjectId is 0, bind no texture
+		bindTexture(0);
 
-		// Issue draw call
 		auto executeDrawCall = [](GLuint vaoId, size_t count) {
 			glBindVertexArray(vaoId);
 			glDrawArrays(GL_TRIANGLES, 0, count);
@@ -771,9 +724,9 @@ int main() try
 
 			auto setLightingUniforms = []() {
 				Vec3f lightDirection = normalize(Vec3f{ 0.f, 1.f, -1.f });
-				glUniform3fv(2, 1, &lightDirection.x); // Ambient light direction
-				glUniform3f(3, 0.9f, 0.9f, 0.9f);     // Diffusion
-				glUniform3f(4, 0.05f, 0.05f, 0.05f);  // Specular
+				glUniform3fv(2, 1, &lightDirection.x);
+				glUniform3f(3, 0.9f, 0.9f, 0.9f);    
+				glUniform3f(4, 0.05f, 0.05f, 0.05f);
 				};
 
 			auto bindTexture = [](GLuint textureId) {
@@ -805,20 +758,10 @@ int main() try
 		mesh_renderer(ship_one_vao, shipVertexCount, 0, prog2.programId(), spaceshipModel2World, normalMatrix);
 
 		
-		
-		//renderSprites(projCameraWorld, prog3.programId());
-
 		glBindVertexArray(0);
-		//glBindVertexArray(1);
-
 		glUseProgram(0);
-		//glUseProgram(1);
-
-		//ENDOF TODO
 
 		OGL_CHECKPOINT_DEBUG();
-
-		// Display results
 		glfwSwapBuffers( window );
 		glfwPollEvents();
 	}
