@@ -1,4 +1,4 @@
-gworkspace "COMP3811-cw2"
+workspace "COMP3811-cw2"
 	language "C++"
 	cppdialect "C++17"
 
