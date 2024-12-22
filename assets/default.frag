@@ -1,29 +1,25 @@
 #version 430
 
-in vec3 v2fColor;
-in vec3 v2fNormal;
-in vec2 v2fTextureCoords;
+in vec3 fragColor;
+in vec3 fragNormal;
+in vec2 fragTexCoords;
 
-layout (location=0) out vec3 oColor;
+layout (location=0) out vec3 fragOutput;
 
-layout (location=2) uniform vec3 uLightDir; //direction of the light to all surfaces
-layout (location=3) uniform vec3 uLightDiffuse;
-layout (location=4) uniform vec3 uSceneAmbient;
-//layout (location=5) uniform vec3 uBaseColor;
-layout (binding=0) uniform sampler2D uTexture;
-
+layout (location=2) uniform vec3 lightDirection;
+layout (location=3) uniform vec3 lightDiffuseIntensity;
+layout (location=4) uniform vec3 ambientLight;
+layout (binding=0) uniform sampler2D textureSampler;
 
 void main()
 {
-	// vec3 normal = normalize(v2fNormal);
-	vec3 normal = normalize(v2fNormal);
+    // Normalize the normal vector
+    vec3 normalizedNormal = normalize(fragNormal);
 
-	float nDotL = max(0.0 , dot(normal, uLightDir));
+    // Calculate dot product for lighting
+    float lightFactor = max(0.0, dot(normalizedNormal, lightDirection));
 
-	//oColor = texture(uTexture, v2fTextureCoords).rgb;
-	//oColor = (uSceneAmbient + nDotL * uLightDiffuse) * v2fColor;
-	oColor = texture(uTexture, v2fTextureCoords).rgb * (uSceneAmbient + nDotL * uLightDiffuse); //might not work
-
-	//oColor = uBaseColor * v2fColor;
-
+    // Compute final color
+    vec3 texColor = texture(textureSampler, fragTexCoords).rgb;
+    fragOutput = texColor * (ambientLight + lightFactor * lightDiffuseIntensity);
 }
