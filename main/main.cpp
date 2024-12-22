@@ -265,15 +265,6 @@ int main() try
 				};
 			float angleX = calculateRotationAngle(state.spaceshipCurve, state.spaceshipOrigin);
 
-			// Define matrices for spaceship transformations
-			auto buildTransformMatrix = [](const Vec3f& translateToOrigin, float rotationAngle, const Vec3f& translateBack, const Vec3f& offset) -> Mat44f {
-				Mat44f translationToOrigin = make_translation(translateToOrigin);
-				Mat44f rotationMatrix = make_rotation_x(rotationAngle);
-				Mat44f originToTranslation = make_translation(translateBack);
-				Mat44f translationMatrix = make_translation(offset);
-				return translationMatrix * originToTranslation * rotationMatrix * translationToOrigin;
-				};
-
 			Mat44f translationToOrigin = make_translation(Vec3f{ 20.f, 1.125f, 15.f });
 			Mat44f xRotationMatrix = make_rotation_x(angleX);
 			Mat44f originToTranslation = make_translation(Vec3f{ -20.f, -1.125f, -15.f });
